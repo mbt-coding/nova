@@ -40,7 +40,7 @@ main{flex:1;overflow-y:auto;display:flex;flex-direction:column;padding:8px 14px;
 #go{background:linear-gradient(135deg,var(--ac),var(--ac2));color:#fff;border-color:transparent}#go:disabled{opacity:.4}
 .sheet{position:absolute;inset:0;z-index:10;background:color-mix(in srgb,var(--bg) 90%,transparent);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);padding:16px;overflow-y:auto;transform:translateY(100%);transition:transform .45s cubic-bezier(.34,1.1,.64,1);visibility:hidden}
 .sheet.on{transform:none;visibility:visible}.sheet h2{font-size:22px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center}
-.sheet label{display:block;margin:12px 0 6px;color:var(--mu);font-size:13px}.wide{width:100%}
+.sheet label{display:block;margin:12px 0 6px;color:var(--mu);font-size:13px}.wide{width:100%}#hq{width:100%;margin:8px 0;font:inherit;color:var(--tx);background:var(--gl);border:1px solid var(--bd);border-radius:14px;padding:9px 14px}.m a{color:inherit;text-decoration:underline}
 .row2{display:flex;gap:8px;margin:8px 0}.row2 button{flex:1}
 .hi{display:flex;gap:6px;margin:6px 0}.hi button:first-child{flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #toast{position:absolute;left:50%;bottom:88px;transform:translateX(-50%);background:var(--ac);color:#fff;padding:8px 16px;border-radius:999px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .3s;z-index:20;max-width:90%;text-align:center}#toast.on{opacity:1}

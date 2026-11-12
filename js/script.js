@@ -8,17 +8,17 @@ let busy = 0, st = "idle", speaking = 0, lst = 0, ctrl = null, ki = 0;
 try { ki = +(sessionStorage.getItem("ki") || 0); } catch (e) {}
 const chat = () => D.chats.find(c => c.id == D.cur);
 const esc = s => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const md = t => t.split("```").map((p, i) => i % 2 ? `<pre>${esc(p.replace(/^[\w-]*\n/, ""))}</pre>` : esc(p).replace(/`([^`\n]+)`/g, "<code>$1</code>").replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>").replace(/\n/g, "<br>")).join("");
+const md = t => t.split("```").map((p, i) => i % 2 ? `<pre>${esc(p.replace(/^[\w-]*\n/, ""))}</pre>` : esc(p).replace(/^#{1,3} (.+)$/gm, "<b>$1</b>").replace(/^[-*] (.+)$/gm, "• $1").replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>').replace(/`([^`\n]+)`/g, "<code>$1</code>").replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>").replace(/\n/g, "<br>")).join("");
 function toast(t) { const e = $("toast"); e.textContent = t; e.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(() => e.classList.remove("on"), 2800); }
 function setSt(s) { st = s; $("stx").textContent = { idle: "Ready", listening: "Listening…", thinking: "Thinking…", speaking: "Speaking…" }[s]; }
 function render() {
-  const c = chat(), m = c ? c.m : [];
+  const c = chat(), m = c ? c.m : [], q = ($("hq").value || "").toLowerCase();
   $("app").classList.toggle("chatting", m.length > 0 || !!busy);
-  $("msgs").innerHTML = m.map((x, i) => `<div class="m ${x.r}${x.err ? " err" : ""}">${md(x.c)}${x.r == "a" ? `<div class="ac"><button data-cp="${i}">Copy</button>${i == m.length - 1 && !x.err ? '<button data-rg="1">Redo</button>' : ""}</div>` : ""}</div>`).join("") + (busy ? '<div class="m a"><span class="dots"><i></i><i></i><i></i></span></div>' : "");
+  $("msgs").innerHTML = m.map((x, i) => `<div class="m ${x.r}${x.err ? " err" : ""}">${md(x.c)}${x.r == "a" ? `<div class="ac"><button data-cp="${i}">Copy</button>${i == m.length - 1 ? '<button data-rg="1">' + (x.err ? "Retry" : "Redo") + '</button>' : ""}</div>` : ""}</div>`).join("") + (busy ? '<div class="m a"><span class="dots"><i></i><i></i><i></i></span></div>' : "");
   $("main").scrollTop = $("main").scrollHeight;
   $("go").textContent = busy ? "■" : "➤";
   $("go").disabled = !busy && !$("in").value.trim();
-  $("hl").innerHTML = D.chats.map(x => `<div class="hi"><button data-o="${x.id}">${esc(x.t)}</button><button data-d="${x.id}" aria-label="Delete chat">🗑</button></div>`).join("") || '<p class="note">No chats yet.</p>';
+  $("hl").innerHTML = D.chats.filter(x => !q || x.t.toLowerCase().includes(q) || x.m.some(y => y.c.toLowerCase().includes(q))).map(x => `<div class="hi"><button data-o="${x.id}">${esc(x.t)}</button><button data-d="${x.id}" aria-label="Delete chat">🗑</button></div>`).join("") || '<p class="note">No chats yet.</p>';
 }
 function newChat() { const c = { id: Date.now(), t: "New chat", m: [] }; D.chats.unshift(c); D.cur = c.id; save(); render(); }
 
@@ -31,7 +31,7 @@ function local(t) {
 }
 function build(key, h) {
   const c = CONFIG, role = x => x.r == "u" ? "user" : "assistant";
-  if (c.provider == "openai") return { url: "https://api.openai.com/v1/chat/completions", hd: { "Content-Type": "application/json", Authorization: "Bearer " + key }, body: { model: c.model, messages: [{ role: "system", content: c.system }, ...h.map(x => ({ role: role(x), content: x.c }))] }, pick: d => d.choices[0].message.content };
+  if (c.provider == "openai" || c.provider == "openrouter") return { url: c.provider == "openrouter" ? "https://openrouter.ai/api/v1/chat/completions" : "https://api.openai.com/v1/chat/completions", hd: { "Content-Type": "application/json", Authorization: "Bearer " + key }, body: { model: c.model, messages: [{ role: "system", content: c.system }, ...h.map(x => ({ role: role(x), content: x.c }))] }, pick: d => d.choices[0].message.content };
   if (c.provider == "gemini") return { url: `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(c.model)}:generateContent?key=${encodeURIComponent(key)}`, hd: { "Content-Type": "application/json" }, body: { systemInstruction: { parts: [{ text: c.system }] }, contents: h.map(x => ({ role: x.r == "u" ? "user" : "model", parts: [{ text: x.c }] })) }, pick: d => d.candidates[0].content.parts.map(p => p.text || "").join("") };
   return { url: "https://api.anthropic.com/v1/messages", hd: { "Content-Type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" }, body: { model: c.model, max_tokens: 1024, system: c.system, messages: h.map(x => ({ role: role(x), content: x.c })) }, pick: d => (d.content || []).map(p => p.text || "").join("") };
 }
@@ -67,7 +67,7 @@ function mic() {
   if (lst) { rec.stop(); return; }
   if (window.speechSynthesis) speechSynthesis.cancel();
   rec = new SR(); rec.interimResults = true; rec.lang = navigator.language || "en-US"; let fin = "";
-  rec.onstart = () => { lst = 1; setSt("listening"); $("mic").classList.add("on"); };
+  rec.onstart = () => { try { navigator.vibrate && navigator.vibrate(20); } catch (e) {} lst = 1; setSt("listening"); $("mic").classList.add("on"); };
   rec.onresult = e => { let s = ""; for (const r of e.results) s += r[0].transcript; fin = s; $("in").value = s; grow(); };
   rec.onerror = e => toast("Microphone: " + e.error);
   rec.onend = () => { lst = 0; $("mic").classList.remove("on"); if (!busy && !speaking) setSt("idle"); if (fin.trim()) send(fin, true); };
@@ -89,11 +89,13 @@ $("mic").onclick = mic;
 $("hb").onclick = () => { render(); $("hist").classList.add("on"); };
 $("sb").onclick = () => $("set").classList.add("on");
 document.querySelectorAll("[data-x]").forEach(b => b.onclick = () => $(b.dataset.x).classList.remove("on"));
+$("hq").oninput = render;
 $("nc").onclick = () => { newChat(); $("hist").classList.remove("on"); };
 $("clr").onclick = () => { D.chats = []; D.cur = null; save(); render(); toast("All chats deleted"); };
 $("ex").onclick = () => {
   const c = chat(); if (!c || !c.m.length) { toast("Nothing to export yet"); return; }
   const txt = c.m.map(x => (x.r == "u" ? "You: " : "NOVA: ") + x.c).join("\n\n"), a = document.createElement("a");
+  if (navigator.share) { navigator.share({ title: "NOVA chat", text: txt }).catch(() => {}); return; }
   a.href = URL.createObjectURL(new Blob([txt], { type: "text/plain" })); a.download = "nova-chat.txt"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 };
 $("hl").onclick = e => { const o = e.target.dataset.o, d = e.target.dataset.d; if (o) { D.cur = +o; save(); render(); $("hist").classList.remove("on"); } else if (d) { D.chats = D.chats.filter(c => c.id != d); if (D.cur == d) D.cur = null; save(); render(); } };
@@ -110,10 +112,10 @@ $("tl").onclick = () => { D.theme = "light"; theme(); save(); };
 /* ---------- red black hole orb with emitted particles ---------- */
 const cv = $("orb"), g = cv.getContext("2d"), RM = matchMedia("(prefers-reduced-motion:reduce)").matches;
 let yaw = 0, pit = .38, T = 0, drag = null, spin = 1, mv = 0;
-const PT = []; for (let i = 0; i < 560; i++) { const r = .3 + Math.pow(Math.random(), 1.5) * .7; PT.push({ r, a: Math.random() * 6.2832, y: (Math.random() - .5) * .05 * r, s: .6 + Math.random() * .8 }); }
+const PT = []; for (let i = 0; i < 220; i++) { const r = .3 + Math.pow(Math.random(), 1.5) * .7; PT.push({ r, a: Math.random() * 6.2832, y: (Math.random() - .5) * .05 * r, s: .6 + Math.random() * .8 }); }
 const EM = [];
 function spawn(n) {
-  for (let i = 0; i < n && EM.length < 420; i++) {
+  for (let i = 0; i < n && EM.length < 140; i++) {
     const a = Math.random() * 6.2832, c = Math.cos(a), s = Math.sin(a), jet = Math.random() < .3, vr = .004 + Math.random() * .01, vt = .012 + Math.random() * .01;
     EM.push(jet ? { x: c * .05, y: 0, z: s * .05, vx: c * .001, vy: (Math.random() < .5 ? -1 : 1) * (.012 + Math.random() * .014), vz: s * .001, l: 1, k: .008 + Math.random() * .01 }
       : { x: c * .29, y: (Math.random() - .5) * .02, z: s * .29, vx: c * vr - s * vt, vy: 0, vz: s * vr + c * vt, l: 1, k: .008 + Math.random() * .012 });
@@ -132,7 +134,7 @@ function frame() {
   const h = g.createRadialGradient(W / 2, W / 2, rc * .8, W / 2, W / 2, R); h.addColorStop(0, "rgba(255,70,60,.55)"); h.addColorStop(.4, "rgba(255,50,70,.16)"); h.addColorStop(1, "rgba(255,40,60,0)");
   g.fillStyle = h; g.beginPath(); g.arc(W / 2, W / 2, R, 0, 6.2832); g.fill();
   const L = PT.map(p => { const w = 2.4 / Math.pow(p.r, 1.5) * p.s, a = p.a + T * w, q = pj(Math.cos(a) * p.r, p.y, Math.sin(a) * p.r), a0 = a - dt * w * 5, q0 = pj(Math.cos(a0) * p.r, p.y, Math.sin(a0) * p.r); return { q, q0, p, k: 1 - (p.r - .3) / .7, s: p.s, a: .35 + .55 * Math.min(1, q.f * .9) }; });
-  spawn(RM ? 0 : Math.round(2 + spin * 1.5));
+  spawn(RM ? 0 : Math.round(.6 + spin * .5));
   for (let i = EM.length - 1; i >= 0; i--) { const e = EM[i], f = 1 + spin * .6; e.x += e.vx * f; e.y += e.vy * f; e.z += e.vz * f; e.l -= e.k; if (e.l <= 0) EM.splice(i, 1); }
   EM.forEach(e => { const f = 1 + spin * .6; L.push({ q: pj(e.x, e.y, e.z), q0: pj(e.x - e.vx * 4 * f, e.y - e.vy * 4 * f, e.z - e.vz * 4 * f), k: .2 + e.l * .8, s: .7, a: Math.max(0, e.l) * .9, em: 1 }); });
   L.sort((m, n) => n.q.z - m.q.z);
@@ -147,4 +149,6 @@ cv.onpointerdown = e => { drag = [e.clientX, e.clientY]; mv = 0; cv.setPointerCa
 cv.onpointermove = e => { if (!drag) return; const dx = e.clientX - drag[0], dy = e.clientY - drag[1]; mv += Math.abs(dx) + Math.abs(dy); yaw += dx * .012; pit = Math.max(-1.3, Math.min(1.3, pit + dy * .012)); drag = [e.clientX, e.clientY]; };
 cv.onpointerup = () => { drag = null; if (mv < 6 && speaking) { speechSynthesis.cancel(); speaking = 0; setSt("idle"); } };
 if (!SR) $("mic").title = "Voice input isn't supported in this browser";
+document.addEventListener("keydown", e => { if (e.key == "Escape") document.querySelectorAll(".sheet.on").forEach(s => s.classList.remove("on")); });
+if ("serviceWorker" in navigator && /^https?:/.test(location.protocol)) navigator.serviceWorker.register("sw.js").catch(() => {});
 theme(); if (!D.chats.find(c => c.id == D.cur)) D.cur = null; render(); frame();

@@ -1,15 +1,13 @@
-// NOVA configuration. Add your API keys below, in the order they should be used.
-// When one key hits its limit, NOVA switches to the next automatically.
+// NOVA configuration. Keys are used in order; when one hits its limit, NOVA switches to the next.
 // WARNING: anything in this file is visible to every visitor of your site.
-// Do NOT commit real keys to a public GitHub repo; see README.md.
+// Keep this repository PRIVATE, or move the keys to a server. See README.md.
 const CONFIG = {
-  provider: "anthropic",            // "anthropic" | "openai" | "gemini"
-  model: "claude-sonnet-4-5",       // edit if the model name changes
+  provider: "openrouter",           // "openrouter" | "anthropic" | "openai" | "gemini"
+  model: "openai/gpt-4o-mini",      // OpenRouter model id; change it to any model your account can use
   system: "You are NOVA, a friendly, concise and helpful assistant.",
   keys: [
-    // "key-1",
-    // "key-2",
-    // "key-3",
-    // "key-4",
+    "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",
+    "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",
+    "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",
   ],
 };
